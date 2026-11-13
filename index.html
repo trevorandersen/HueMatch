@@ -202,10 +202,12 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
   const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
+  // every colour on screen stays within this lightness band
+  const L_MIN = 0.4, L_MAX = 0.8;
   function randomTarget() {
     for (;;) {
-      // chroma floor keeps hue readable
-      const L = rand(0.45, 0.85), C = rand(0.1, 0.2), h = rand(0, 360) * Math.PI / 180;
+      // chroma floor keeps hue readable; target sits inside the band so decoys can move both ways
+      const L = rand(L_MIN + 0.05, L_MAX - 0.05), C = rand(0.1, 0.2), h = rand(0, 360) * Math.PI / 180;
       const lab = [L, C * Math.cos(h), C * Math.sin(h)];
       if (inGamut(lab)) return lab;
     }
@@ -220,7 +222,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     for (let i = 0; i < 60; i++) {
       const th = rand(0, 2 * Math.PI);
       const nL = L + lc * Math.cos(th), nC = C + lc * Math.sin(th);
-      if (nC < C * 0.6) continue;
+      if (nC < C * 0.6 || nL < L_MIN || nL > L_MAX) continue;
       const p = [nL, nC * Math.cos(h + turn), nC * Math.sin(h + turn)];
       if (inGamut(p)) return p;
     }
