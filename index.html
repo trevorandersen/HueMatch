@@ -204,12 +204,23 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
 
   // every colour on screen stays within this lightness band
   const L_MIN = 0.4, L_MAX = 0.8;
+  // saturation here = chroma as a share of the most chroma sRGB can show at that lightness and hue
+  const S_MIN = 0.4, S_MAX = 0.8;
+  function maxChroma(L, h) {
+    let lo = 0, hi = 0.4;
+    for (let i = 0; i < 18; i++) {
+      const mid = (lo + hi) / 2;
+      if (inGamut([L, mid * Math.cos(h), mid * Math.sin(h)])) lo = mid; else hi = mid;
+    }
+    return lo;
+  }
   function randomTarget() {
     for (;;) {
-      // chroma floor keeps hue readable; target sits inside the band so decoys can move both ways
-      const L = rand(L_MIN + 0.05, L_MAX - 0.05), C = rand(0.1, 0.2), h = rand(0, 360) * Math.PI / 180;
-      const lab = [L, C * Math.cos(h), C * Math.sin(h)];
-      if (inGamut(lab)) return lab;
+      // target sits inside both bands so decoys can move either way
+      const L = rand(L_MIN + 0.05, L_MAX - 0.05), h = rand(0, 360) * Math.PI / 180;
+      const C = rand(S_MIN + 0.1, S_MAX - 0.1) * maxChroma(L, h);
+      if (C < 0.05) continue; // too grey for hue to read
+      return [L, C * Math.cos(h), C * Math.sin(h)];
     }
   }
   // signed hue difference in degrees, -180..180
@@ -222,7 +233,9 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     for (let i = 0; i < 60; i++) {
       const th = rand(0, 2 * Math.PI);
       const nL = L + lc * Math.cos(th), nC = C + lc * Math.sin(th);
-      if (nC < C * 0.6 || nL < L_MIN || nL > L_MAX) continue;
+      if (nC <= 0 || nL < L_MIN || nL > L_MAX) continue;
+      const sat = nC / maxChroma(nL, h + turn);
+      if (sat < S_MIN || sat > S_MAX) continue;
       const p = [nL, nC * Math.cos(h + turn), nC * Math.sin(h + turn)];
       if (inGamut(p)) return p;
     }
