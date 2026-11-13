@@ -92,11 +92,12 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   color: var(--ink, var(--fg));
 }
 .lineup .cell {
-  position: absolute; width: 40px; margin-left: -20px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  position: absolute; width: 40px; margin-left: -20px; margin-top: -11px; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
   background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit;
 }
 .lineup .cell .dot { width: 22px; height: 22px; border-radius: 50%; }
-.lineup .cell.tgt .dot { width: 30px; height: 30px; margin-top: -4px; }
+.lineup .cell.tgt { margin-top: -15px; z-index: 2; }
+.lineup .cell.tgt .dot { width: 30px; height: 30px; }
 .lineup .cell.tgt .lbl { font-weight: 600; }
 .lineup .cell .lbl { font-family: var(--mono); font-size: 0.56rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lineup .cell.correct .dot { box-shadow: 0 0 0 2px var(--good); }
@@ -108,6 +109,11 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
 .lineup .tick.zero { height: 9px; opacity: 0.8; }
 .lineup .tlbl { position: absolute; transform: translateX(-50%); font-family: var(--mono); font-size: 0.58rem; opacity: 0.7; white-space: nowrap; }
 .lineup .end { position: absolute; font-size: 0.62rem; opacity: 0.7; }
+.lineup .vrule { position: absolute; width: 1px; background: currentColor; opacity: 0.35; }
+.lineup .ytick { position: absolute; height: 1px; width: 5px; background: currentColor; opacity: 0.5; }
+.lineup .ylbl { position: absolute; transform: translateY(-50%); font-family: var(--mono); font-size: 0.58rem; opacity: 0.7; text-align: right; width: 30px; }
+.lineup .guide { position: absolute; border: 0 dashed currentColor; opacity: 0.25; }
+.lineup .ytitle { position: absolute; font-size: 0.62rem; opacity: 0.7; }
 .detail {
   width: 100%; font-family: var(--mono); font-size: 0.75rem; font-variant-numeric: tabular-nums;
   display: grid; grid-template-columns: auto repeat(4, 1fr); gap: 4px 10px; align-items: center;
@@ -412,30 +418,39 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     const items = r.opts.map((o, i) => ({ i, lab: o.lab, dh: hueDiff(o.lab, r.target) }));
     items.push({ i: -1, lab: r.target, dh: 0 });
 
-    // horizontal scale: symmetric around the target so 0° sits in the middle
-    const W = el.clientWidth, PAD = 30;
-    const span = Math.max(...items.map(it => Math.abs(it.dh))) * 1.08 || 1;
-    const x = dh => W / 2 + dh / span * (W / 2 - PAD);
-
-    // stack swatches that would overlap into lanes (target always in lane 0)
-    const CELL = 38, LANE = 35, TOP = 12;
-    const lanes = [];
-    const order = [...items].sort((a, b) => (a.i < 0 ? -1 : b.i < 0 ? 1 : a.dh - b.dh));
-    for (const it of order) {
-      it.x = x(it.dh);
-      let k = 0;
-      while (lanes[k] && lanes[k].some(px => Math.abs(px - it.x) < CELL)) k++;
-      (lanes[k] = lanes[k] || []).push(it.x);
-      it.lane = k;
-    }
-    const axisY = TOP + lanes.length * LANE + 4;
+    // 2-D plot: x = signed hue difference (target at 0°, centred), y = OKLCH chroma
+    const W = el.clientWidth, PL = 46, PR = 22, T = 22, H = 170;
+    const add = (cls, styles, text) => { const d = document.createElement('div'); d.className = cls; Object.assign(d.style, styles); if (text) d.textContent = text; el.appendChild(d); };
+    const cx = PL + (W - PL - PR) / 2, half = (W - PL - PR) / 2 - 14;
+    const span = Math.max(...items.map(it => Math.abs(it.dh))) * 1.05 || 1;
+    const x = dh => cx + dh / span * half;
+    const Cs = items.map(it => toLch(it.lab)[1]);
+    let cLo = Math.min(...Cs), cHi = Math.max(...Cs);
+    const padC = Math.max(0.006, (cHi - cLo) * 0.12);
+    cLo -= padC; cHi += padC;
+    const y = C => T + (cHi - C) / (cHi - cLo) * H;
+    items.forEach((it, k) => { it.x = x(it.dh); it.y = y(Cs[k]); });
+    const tgtC = toLch(r.target)[1];
+    const axisY = T + H + 18;
     el.style.height = (axisY + 34) + 'px';
+
+    // y axis with chroma ticks
+    add('vrule', { left: PL + 'px', top: T - 8 + 'px', height: (axisY - T + 8) + 'px' });
+    const cStep = [0.005, 0.01, 0.02, 0.05].find(st => (cHi - cLo) / st <= 5) || 0.1;
+    for (let c = Math.ceil(cLo / cStep) * cStep; c <= cHi + 1e-9; c += cStep) {
+      add('ytick', { left: (PL - 5) + 'px', top: y(c) + 'px' });
+      add('ylbl', { left: (PL - 37) + 'px', top: y(c) + 'px' }, c.toFixed(cStep < 0.01 ? 3 : 2));
+    }
+    add('ytitle', { left: (PL + 6) + 'px', top: '4px' }, '↑ chroma');
+    // dashed guides through the target
+    add('guide', { left: cx + 'px', top: T - 8 + 'px', height: (axisY - T + 8) + 'px', borderLeftWidth: '1px' });
+    add('guide', { left: PL + 'px', right: PR + 'px', top: y(tgtC) + 'px', borderTopWidth: '1px' });
 
     for (const it of items) {
       const c = document.createElement(it.i < 0 ? 'div' : 'button');
       c.className = 'cell' + (it.i < 0 ? ' tgt' : '');
       c.style.left = it.x.toFixed(1) + 'px';
-      c.style.top = (TOP + it.lane * LANE) + 'px';
+      c.style.top = it.y.toFixed(1) + 'px';
       if (it.i >= 0) {
         c.type = 'button';
         if (it.i === r.answer) c.classList.add('correct');
@@ -444,20 +459,23 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
         c.setAttribute('aria-label', `Swatch, hue ${it.dh >= 0 ? '+' : '−'}${Math.abs(it.dh).toFixed(1)} degrees, show stats`);
         c.addEventListener('click', () => pick(it.i));
       }
-      c.innerHTML = `<span class="dot" style="background:${css(it.lab)}"></span><span class="lbl">${it.i < 0 ? 'target' : (it.dh >= 0 ? '+' : '−') + Math.abs(it.dh).toFixed(1) + '°'}</span>`;
+      // label only the target, the answer, your pick and the inspected swatch, so labels don't pile up
+      const labelled = it.i < 0 || it.i === r.answer || it.i === state.picked || it.i === state.inspect;
+      const txt = it.i < 0 ? 'target' : (it.dh >= 0 ? '+' : '−') + Math.abs(it.dh).toFixed(1) + '°';
+      c.innerHTML = `<span class="dot" style="background:${css(it.lab)}"></span>` + (labelled ? `<span class="lbl">${txt}</span>` : '');
+      if (labelled && it.i >= 0) c.style.zIndex = 3;
       el.appendChild(c);
     }
 
-    // axis with ticks every 2°, 5° or 10° depending on span
-    const add = (cls, styles, text) => { const d = document.createElement('div'); d.className = cls; Object.assign(d.style, styles); if (text) d.textContent = text; el.appendChild(d); };
-    add('rule', { left: PAD + 'px', right: PAD + 'px', top: axisY + 'px' });
+    // x axis: hue difference, ticks every 2°, 5° or 10° depending on span
+    add('rule', { left: PL + 'px', right: PR + 'px', top: axisY + 'px' });
     const step = span > 25 ? 10 : span > 10 ? 5 : 2;
     for (let v = -Math.floor(span / step) * step; v <= span; v += step) {
       const px = x(v) + 'px';
       add('tick' + (v === 0 ? ' zero' : ''), { left: px, top: axisY + 'px' });
       add('tlbl', { left: px, top: (axisY + 9) + 'px' }, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '°');
     }
-    add('end', { left: '10px', top: (axisY + 20) + 'px' }, '← lower hue');
+    add('end', { left: PL + 'px', top: (axisY + 20) + 'px' }, '← lower hue');
     add('end', { right: '10px', top: (axisY + 20) + 'px' }, 'higher hue →');
   }
 
