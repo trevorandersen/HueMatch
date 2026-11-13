@@ -456,25 +456,27 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
         if (it.i === r.answer) c.classList.add('correct');
         else if (it.i === state.picked) c.classList.add('wrong');
         if (it.i === state.inspect) c.classList.add('inspected');
-        c.setAttribute('aria-label', `Swatch, hue ${it.dh >= 0 ? '+' : '−'}${Math.abs(it.dh).toFixed(1)} degrees, show stats`);
+        c.setAttribute('aria-label', `Swatch, hue ${toLch(it.lab)[2].toFixed(1)} degrees, show stats`);
         c.addEventListener('click', () => pick(it.i));
       }
       // label only the target, the answer, your pick and the inspected swatch, so labels don't pile up
       const labelled = it.i < 0 || it.i === r.answer || it.i === state.picked || it.i === state.inspect;
-      const txt = it.i < 0 ? 'target' : (it.dh >= 0 ? '+' : '−') + Math.abs(it.dh).toFixed(1) + '°';
+      const txt = (it.i < 0 ? 'target ' : '') + toLch(it.lab)[2].toFixed(1) + '°';
       c.innerHTML = `<span class="dot" style="background:${css(it.lab)}"></span>` + (labelled ? `<span class="lbl">${txt}</span>` : '');
       if (labelled && it.i >= 0) c.style.zIndex = 3;
       el.appendChild(c);
     }
 
-    // x axis: hue difference, ticks every 2°, 5° or 10° depending on span
+    // x axis: absolute OKLCH hue, ticks on round hue values every 2°, 5° or 10° depending on span
     add('rule', { left: PL + 'px', right: PR + 'px', top: axisY + 'px' });
     const step = span > 25 ? 10 : span > 10 ? 5 : 2;
-    for (let v = -Math.floor(span / step) * step; v <= span; v += step) {
-      const px = x(v) + 'px';
-      add('tick' + (v === 0 ? ' zero' : ''), { left: px, top: axisY + 'px' });
-      add('tlbl', { left: px, top: (axisY + 9) + 'px' }, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '°');
+    const tgtH = toLch(r.target)[2];
+    for (let a = Math.ceil((tgtH - span) / step) * step; a <= tgtH + span; a += step) {
+      const px = x(a - tgtH) + 'px';
+      add('tick', { left: px, top: axisY + 'px' });
+      add('tlbl', { left: px, top: (axisY + 9) + 'px' }, (((a % 360) + 360) % 360) + '°');
     }
+    add('tick zero', { left: cx + 'px', top: axisY + 'px' });
     add('end', { left: PL + 'px', top: (axisY + 20) + 'px' }, '← lower hue');
     add('end', { right: '10px', top: (axisY + 20) + 'px' }, 'higher hue →');
   }
