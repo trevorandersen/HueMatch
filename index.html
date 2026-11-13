@@ -42,9 +42,9 @@ body {
   box-sizing: border-box;
 }
 main { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-header { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+header { width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 12px; }
 h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
-.stats { display: flex; gap: 16px; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .stats b { color: var(--fg); font-weight: 600; }
 .modes { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
 .modes button {
@@ -53,6 +53,16 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
 }
 .modes button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
 .modes button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.custom {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px; margin: 0;
+  padding: 12px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 10px 12px; align-items: center;
+}
+.custom legend { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 0 4px; }
+.custom label { font-size: 0.85rem; }
+.custom input[type="range"] { width: 100%; min-width: 0; accent-color: var(--fg); }
+.custom output { font-family: var(--mono); font-size: 0.75rem; font-variant-numeric: tabular-nums; min-width: 3.5em; text-align: right; }
+.custom .check { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
+.custom .check input { accent-color: var(--fg); }
 .plate {
   position: relative; width: 310px; height: 310px; max-width: 100%; border-radius: 50%;
   background: var(--plate); transition: background-color 0.3s ease;
@@ -118,7 +128,22 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     <button type="button" id="mode-easy" data-mode="easy">Easy</button>
     <button type="button" id="mode-medium" data-mode="medium">Medium</button>
     <button type="button" id="mode-hard" data-mode="hard">Hard</button>
+    <button type="button" id="mode-custom" data-mode="custom">Custom</button>
   </div>
+
+  <fieldset class="custom" id="customPanel" hidden>
+    <legend>Custom difficulty</legend>
+    <label for="c-spread">Spread</label>
+    <input type="range" id="c-spread" min="1" max="12" step="0.5">
+    <output id="o-spread" for="c-spread"></output>
+    <label for="c-margin">Closest at</label>
+    <input type="range" id="c-margin" min="30" max="95" step="5">
+    <output id="o-margin" for="c-margin"></output>
+    <label for="c-hue">Hue shift</label>
+    <input type="range" id="c-hue" min="0" max="15" step="1">
+    <output id="o-hue" for="c-hue"></output>
+    <label class="check" for="c-tighten"><input type="checkbox" id="c-tighten"> Tighten as my streak grows</label>
+  </fieldset>
 
   <div class="plate" id="plate" aria-label="Target colour with ten candidate swatches">
     <div class="target" id="target"></div>
@@ -128,7 +153,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   <div class="detail" id="detail" hidden></div>
   <button class="next" id="next" hidden>Next colour</button>
 
-  <p class="foot">Distance is ΔE<sub>OK</sub>, straight-line distance in OKLab (the Cartesian form of OKLCH), shown ×100. A game is 10 rounds; Easy spreads the swatches wider, Hard packs them tighter, and each mode keeps its own best. Changing mode starts a new game. Closest scores 10, second 7, third 4.5, any other up to 4. Subtle calls earn a bonus: up to +5 for the closest, +3 for second, +2 for third. A call is subtle when the ΔE gap is small: between the closest and runner-up when you're right, or between your pick and the closest when you're not. Swatches get closer together as your streak grows. Keys 1–9 and 0 pick clockwise from the top; Enter moves on.</p>
+  <p class="foot">Distance is ΔE<sub>OK</sub>, straight-line distance in OKLab (the Cartesian form of OKLCH), shown ×100. A game is 10 rounds; Easy spreads the swatches wider, Hard packs them tighter, and each mode keeps its own best. Custom lets you set the spread (ΔE×100 of the wrong swatches), how close the right answer sits as a share of that, and how far hue may drift; each custom setup keeps its own best. Changing mode starts a new game. Closest scores 10, second 7, third 4.5, any other up to 4. Subtle calls earn a bonus: up to +5 for the closest, +3 for second, +2 for third. A call is subtle when the ΔE gap is small: between the closest and runner-up when you're right, or between your pick and the closest when you're not. Swatches get closer together as your streak grows. Keys 1–9 and 0 pick clockwise from the top; Enter moves on.</p>
 </main>
 
 <script>
@@ -171,14 +196,16 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     return [u * 0.8, r * Math.cos(t), r * Math.sin(t)];
   }
   // weights for random shifts along lightness, chroma, and hue (hue kept small)
-  const W_L = 1, W_C = 1, W_H = 0.05;
-  const MAX_HUE_DEG = 3;
+  const W_L = 1, W_C = 1;
+  // hue drift: capped in degrees per mode; above 3° the hue weight grows so drift actually shows
+  const hueCap = () => Math.max(0.5, MODES[mode].hue);
+  const hueWeight = () => 0.05 + Math.max(0, MODES[mode].hue - 3) * 0.05;
   function offsetPoint(base, mag) {
     const C = Math.hypot(base[1], base[2]) || 1e-6;
     const rad = [base[1] / C, base[2] / C], tan = [-rad[1], rad[0]];
     for (let i = 0; i < 60; i++) {
       const [u, x, y] = randomDir();
-      const dL = u * W_L, dC = x * W_C, dH = y * W_H;
+      const dL = u * W_L, dC = x * W_C, dH = y * hueWeight();
       const d = [dL, rad[0] * dC + tan[0] * dH, rad[1] * dC + tan[1] * dH];
       const n = Math.hypot(...d);
       const p = base.map((v, k) => v + d[k] / n * mag);
@@ -186,7 +213,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
       const pc = Math.hypot(p[1], p[2]);
       if (pc < C * 0.5) continue;
       const dh = Math.acos(Math.min(1, (p[1] * base[1] + p[2] * base[2]) / (pc * C))) * 180 / Math.PI;
-      if (dh > MAX_HUE_DEG) continue;
+      if (dh > hueCap()) continue;
       if (inGamut(p)) return p;
     }
     return null;
@@ -195,10 +222,22 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   // difficulty: base offset shrinks and the gap between best and the rest narrows with streak
   // base: typical wrong-answer distance at streak 0; ratio: best/others gap (closer to 1 = harder)
   const MODES = {
-    easy:   { base: 0.08, ratio: 0.45, ratioStep: 0.02,  shrink: 0.92 },
-    medium: { base: 0.05, ratio: 0.55, ratioStep: 0.025, shrink: 0.88 },
-    hard:   { base: 0.03, ratio: 0.68, ratioStep: 0.02,  shrink: 0.9 },
+    easy:   { base: 0.08, ratio: 0.45, ratioStep: 0.02,  shrink: 0.92, hue: 3 },
+    medium: { base: 0.05, ratio: 0.55, ratioStep: 0.025, shrink: 0.88, hue: 3 },
+    hard:   { base: 0.03, ratio: 0.68, ratioStep: 0.02,  shrink: 0.9,  hue: 3 },
+    custom: { base: 0.05, ratio: 0.55, ratioStep: 0.025, shrink: 0.88, hue: 3 },
   };
+  // custom settings as shown on the sliders
+  const custom = { spread: 5, margin: 55, hue: 3, tighten: true };
+  try { Object.assign(custom, JSON.parse(localStorage.getItem('hueMatchCustom') || '{}')); } catch (e) {}
+  function applyCustom() {
+    Object.assign(MODES.custom, {
+      base: custom.spread / 100, ratio: custom.margin / 100, hue: custom.hue,
+      ratioStep: custom.tighten ? 0.025 : 0, shrink: custom.tighten ? 0.88 : 1,
+    });
+  }
+  applyCustom();
+  const customKey = () => `custom_${custom.spread}_${custom.margin}_${custom.hue}_${custom.tighten ? 1 : 0}`;
   function makeRound(streak) {
     const m = MODES[mode];
     const lvl = Math.min(streak, 15);
@@ -231,11 +270,32 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   let bestScore = null;
   function loadBest() {
     bestScore = null;
-    try { const v = localStorage.getItem('nearestHueBest2_' + mode); if (v != null) bestScore = +v; } catch (e) {}
+    try { const v = localStorage.getItem('nearestHueBest2_' + bestKey()); if (v != null) bestScore = +v; } catch (e) {}
   }
+  function bestKey() { return mode === 'custom' ? customKey() : mode; }
   loadBest();
   function syncModeButtons() {
     document.querySelectorAll('.modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    $('customPanel').hidden = mode !== 'custom';
+  }
+  // custom panel wiring
+  const ctl = { spread: $('c-spread'), margin: $('c-margin'), hue: $('c-hue') };
+  const showCustom = () => {
+    $('o-spread').textContent = 'ΔE ' + (+ctl.spread.value).toFixed(1);
+    $('o-margin').textContent = ctl.margin.value + '%';
+    $('o-hue').textContent = '±' + ctl.hue.value + '°';
+  };
+  Object.entries(ctl).forEach(([k, el]) => {
+    el.value = custom[k];
+    el.addEventListener('input', showCustom);
+    el.addEventListener('change', () => { custom[k] = +el.value; customChanged(); });
+  });
+  $('c-tighten').checked = custom.tighten;
+  $('c-tighten').addEventListener('change', e => { custom.tighten = e.target.checked; customChanged(); });
+  showCustom();
+  function customChanged() {
+    try { localStorage.setItem('hueMatchCustom', JSON.stringify(custom)); } catch (e) {}
+    applyCustom(); loadBest(); newGame();
   }
   document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
     if (b.dataset.mode === mode && state.roundNo <= 1 && !state.done) return;
@@ -337,7 +397,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   function finish() {
     state.over = true;
     const isBest = bestScore == null || state.score > bestScore;
-    if (isBest) { bestScore = state.score; try { localStorage.setItem('nearestHueBest2_' + mode, String(bestScore)); } catch (e) {} }
+    if (isBest) { bestScore = state.score; try { localStorage.setItem('nearestHueBest2_' + bestKey(), String(bestScore)); } catch (e) {} }
     readout.innerHTML = `<span class="verdict ok">${fmt(state.score)} points</span> · ${state.hits}/${ROUNDS} closest picks${isBest ? ' · new best' : ` · best ${fmt(bestScore)}`}`;
     render();
     nextBtn.focus();
