@@ -323,8 +323,9 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     const all = [r.target, ...r.opts.map(o => o.lab)];
     const avg = [0, 1, 2].map(k => all.reduce((s, p) => s + p[k], 0) / all.length);
     const [aL, aC, aH] = toLch(avg);
-    // light target -> slightly lighter plate, dark target -> slightly darker
-    const pL = 0.93; // always a light grey field
+    // grey plate follows the swatches' average lightness: darker swatches, darker plate.
+    // Mapped into 0.6-1 so the plate stays a light-to-mid grey (avg 0.42 -> 0.77, avg 0.88 -> 0.95).
+    const pL = 0.6 + 0.4 * aL;
     // plain neutral grey
     plate.style.backgroundColor = `oklch(${pL.toFixed(4)} 0 0)`;
     plate.style.setProperty('--ink', pL > 0.6 ? 'oklch(0.22 0 0)' : 'oklch(0.96 0 0)');
