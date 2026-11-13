@@ -250,13 +250,13 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   const hueDiff = (p, q) => { let d = (toLch(p)[2] - toLch(q)[2]) % 360; if (d > 180) d -= 360; if (d < -180) d += 360; return d; };
 
   // a swatch turned dh degrees in hue, with a lightness/chroma decoy shift of size lc (OKLab units)
-  function makeSwatch(target, dh, lc) {
+  function makeSwatch(target, dh, lc, lSpread = L_SPREAD) {
     const L = target[0], C = Math.hypot(target[1], target[2]), h = Math.atan2(target[2], target[1]);
     const turn = (Math.random() < 0.5 ? -1 : 1) * dh * Math.PI / 180;
     for (let i = 0; i < 60; i++) {
       const th = rand(0, 2 * Math.PI);
       // decoy shift plus an independent lightness spread so distractors don't bunch together
-      const nL = L + lc * Math.cos(th) + rand(-L_SPREAD, L_SPREAD), nC = C + lc * Math.sin(th);
+      const nL = L + lc * Math.cos(th) + rand(-lSpread, lSpread), nC = C + lc * Math.sin(th);
       if (nC <= 0 || nL < L_MIN || nL > L_MAX) continue;
       const sat = nC / maxChroma(nL, h + turn);
       if (sat < S_MIN || sat > S_MAX) continue;
@@ -270,7 +270,8 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   // ratio: closest offset as a share of that (closer to 1 = harder); decoy: max lightness/chroma shift.
   // The closer a swatch's hue, the bigger its lightness/chroma decoy, so the right answer looks most off.
   const MODES = {
-    veryeasy: { hue: 22, ratio: 0.35, ratioStep: 0.015, shrink: 0.95, decoy: 0.025 },
+    // Very easy: wrong hues spread wide (22-55°), and the answer keeps lightness/chroma close to the target
+    veryeasy: { hue: 22, ratio: 0.35, ratioStep: 0.015, shrink: 0.95, decoy: 0.04, spread: 2.5, answerClose: true },
     easy:   { hue: 14, ratio: 0.45, ratioStep: 0.02,  shrink: 0.93, decoy: 0.04 },
     medium: { hue: 9,  ratio: 0.55, ratioStep: 0.025, shrink: 0.9,  decoy: 0.06 },
     hard:   { hue: 6,  ratio: 0.65, ratioStep: 0.02,  shrink: 0.92, decoy: 0.08 },
@@ -295,7 +296,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     const ratio = Math.min(0.92, m.ratio + m.ratioStep * lvl);
     for (;;) {
       const target = randomTarget();
-      const dhs = [base * ratio, ...Array.from({ length: N - 1 }, () => base * rand(1, 1.4))];
+      const dhs = [base * ratio, ...Array.from({ length: N - 1 }, () => base * rand(1, m.spread || 1.4))];
       const lo = Math.min(...dhs), hi = Math.max(...dhs);
       // three random wrong swatches also get a full-size decoy, so "most different-looking" isn't a giveaway
       const loud = new Set();
@@ -303,8 +304,10 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
       const opts = [];
       for (const [k, dh] of dhs.entries()) {
         const closeness = loud.has(k) ? 1 : (hi - dh) / (hi - lo); // 1 for the closest hue, 0 for the furthest
-        const lc = m.decoy * (0.2 + 0.8 * closeness) * rand(0.7, 1.3);
-        const p = makeSwatch(target, dh, lc);
+        const isAnswer = k === 0;
+        const p = isAnswer && m.answerClose
+          ? makeSwatch(target, dh, 0.012 * Math.random(), 0.03)   // answer looks like the target apart from hue
+          : makeSwatch(target, dh, m.decoy * (0.2 + 0.8 * closeness) * rand(0.7, 1.3));
         if (!p) break;
         opts.push({ lab: p, d: Math.abs(hueDiff(p, target)), de: dist(p, target) });
       }
