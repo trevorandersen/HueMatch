@@ -6,7 +6,7 @@ A hue matching game. A target colour sits in the middle of a ring of eight swatc
 
 Open `index.html` in a browser. There is no build step and nothing to install.
 
-- **Modes:** Easy, Medium and Hard set how close the hues are and how strong the lightness/chroma decoys are. Custom has sliders for the hue spread, how close the right answer sits, and the decoy size. Each mode (and each custom setup) keeps its own best score in the browser.
+- **Modes:** Very easy, Easy, Medium and Hard set how close the hues are and how strong the lightness/chroma decoys are. Custom has sliders for the hue spread, how close the right answer sits, and the decoy size. Each mode (and each custom setup) keeps its own best score in the browser.
 - **Rounds:** a game is 10 rounds. Hues move closer together as your streak grows.
 - **Scoring:** closest hue 10, second 7, third 4.5, any other up to 4. Subtle calls (hue gaps under 4°) earn a bonus of up to +5, +3 and +2 for the top three.
 - **After a pick:** a chart plots every swatch by OKLCH hue (across, centred on the target) and chroma (up), with dashed guides through the target. Tap any swatch (in the ring or the row) to see its OKLCH values and its difference from the target.

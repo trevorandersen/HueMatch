@@ -50,7 +50,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
 .modes { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
 .modes button {
   font: 600 0.8rem var(--display); color: var(--muted); background: none; border: 0;
-  border-radius: 999px; padding: 6px 16px; cursor: pointer;
+  border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap;
 }
 .modes button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
 .modes button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
@@ -153,6 +153,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   </header>
 
   <div class="modes" role="group" aria-label="Difficulty">
+    <button type="button" id="mode-veryeasy" data-mode="veryeasy">Very easy</button>
     <button type="button" id="mode-easy" data-mode="easy">Easy</button>
     <button type="button" id="mode-medium" data-mode="medium">Medium</button>
     <button type="button" id="mode-hard" data-mode="hard">Hard</button>
@@ -182,7 +183,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   <div class="detail" id="detail" hidden></div>
   <button class="next" id="next" hidden>Next colour</button>
 
-  <p class="foot">Find the swatch whose hue is closest to the centre colour, measured as the OKLCH hue angle. Lightness and chroma are decoys: the closer a swatch's hue, the further its lightness and chroma are pushed, so the right answer often looks the most different. A game is 10 rounds. Easy spreads the hues wider with milder decoys, Hard packs them tighter with stronger ones, and Custom lets you set the hue spread, how close the right answer sits as a share of it, and the decoy size. Each mode and custom setup keeps its own best. Closest scores 10, second 7, third 4.5, any other up to 4. Subtle calls earn a bonus: up to +5 for the closest, +3 for second, +2 for third, when the deciding hue gap is under 4°. Hues get closer together as your streak grows. Keys 1–8 pick clockwise from the top; Enter moves on.</p>
+  <p class="foot">Find the swatch whose hue is closest to the centre colour, measured as the OKLCH hue angle. Lightness and chroma are decoys: the closer a swatch's hue, the further its lightness and chroma are pushed, so the right answer often looks the most different. A game is 10 rounds. Very easy and Easy spread the hues wider with milder decoys, Hard packs them tighter with stronger ones, and Custom lets you set the hue spread, how close the right answer sits as a share of it, and the decoy size. Each mode and custom setup keeps its own best. Closest scores 10, second 7, third 4.5, any other up to 4. Subtle calls earn a bonus: up to +5 for the closest, +3 for second, +2 for third, when the deciding hue gap is under 4°. Hues get closer together as your streak grows. Keys 1–8 pick clockwise from the top; Enter moves on.</p>
 </main>
 
 <script>
@@ -256,6 +257,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   // ratio: closest offset as a share of that (closer to 1 = harder); decoy: max lightness/chroma shift.
   // The closer a swatch's hue, the bigger its lightness/chroma decoy, so the right answer looks most off.
   const MODES = {
+    veryeasy: { hue: 22, ratio: 0.35, ratioStep: 0.015, shrink: 0.95, decoy: 0.025 },
     easy:   { hue: 14, ratio: 0.45, ratioStep: 0.02,  shrink: 0.93, decoy: 0.04 },
     medium: { hue: 9,  ratio: 0.55, ratioStep: 0.025, shrink: 0.9,  decoy: 0.06 },
     hard:   { hue: 6,  ratio: 0.65, ratioStep: 0.02,  shrink: 0.92, decoy: 0.08 },
