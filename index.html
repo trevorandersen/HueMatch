@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nearest Hue</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,750&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one centred instrument — a ring of swatches on a neutral plate, readout below. */
+:root {
+  --bg: oklch(0.955 0.003 260);
+  --plate: oklch(0.88 0 0);
+  --fg: oklch(0.24 0.01 260);
+  --muted: oklch(0.52 0.01 260);
+  --line: oklch(0.82 0.005 260);
+  --good: oklch(0.58 0.15 150);
+  --bad: oklch(0.58 0.19 28);
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.2 0.004 260); --plate: oklch(0.42 0 0); --fg: oklch(0.93 0.004 260);
+    --muted: oklch(0.68 0.008 260); --line: oklch(0.32 0.006 260);
+    --good: oklch(0.74 0.15 150); --bad: oklch(0.7 0.17 28); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.2 0.004 260); --plate: oklch(0.42 0 0); --fg: oklch(0.93 0.004 260);
+  --muted: oklch(0.68 0.008 260); --line: oklch(0.32 0.006 260);
+  --good: oklch(0.74 0.15 150); --bad: oklch(0.7 0.17 28); color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--display);
+  display: grid; place-items: center;
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
+}
+main { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+header { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+.stats { display: flex; gap: 16px; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--fg); font-weight: 600; }
+.modes { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.modes button {
+  font: 600 0.8rem var(--display); color: var(--muted); background: none; border: 0;
+  border-radius: 999px; padding: 6px 16px; cursor: pointer;
+}
+.modes button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.modes button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.plate {
+  position: relative; width: 310px; height: 310px; max-width: 100%; border-radius: 50%;
+  background: var(--plate); transition: background-color 0.3s ease;
+}
+.target {
+  position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px;
+  border-radius: 50%;
+}
+.opt {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+  padding: 0; border: 0; background: none; cursor: pointer; border-radius: 50%;
+  display: grid; place-items: center;
+}
+.opt .dot { width: 40px; height: 40px; border-radius: 50%; transition: transform 0.15s ease; }
+.opt:hover .dot, .opt:focus-visible .dot { transform: scale(1.12); }
+.opt:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
+.opt.correct { box-shadow: 0 0 0 3px var(--good); }
+.opt.wrong { box-shadow: 0 0 0 3px var(--bad); }
+.opt .de {
+  position: absolute; top: 100%; margin-top: 2px; font-family: var(--mono); font-size: 0.65rem;
+  color: var(--ink, var(--fg)); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.opt.inspected .dot { outline: 2px solid var(--ink, var(--fg)); outline-offset: 3px; }
+.detail {
+  width: 100%; font-family: var(--mono); font-size: 0.75rem; font-variant-numeric: tabular-nums;
+  display: grid; grid-template-columns: auto repeat(4, 1fr); gap: 4px 10px; align-items: center;
+  border-top: 1px solid var(--line); padding-top: 12px;
+}
+.detail .h { color: var(--muted); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.detail .sw { width: 14px; height: 14px; border-radius: 50%; display: inline-block; vertical-align: -2px; margin-right: 6px; }
+.detail .lab { white-space: nowrap; }
+.detail .hint { grid-column: 1 / -1; color: var(--muted); font-family: var(--display); font-size: 0.8rem; }
+.readout {
+  width: 100%; min-height: 3.2em; text-align: center; font-size: 0.95rem; line-height: 1.5;
+}
+.readout .verdict { font-weight: 750; }
+.readout .verdict.ok { color: var(--good); }
+.readout .verdict.no { color: var(--bad); }
+.readout code { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+.next {
+  font: 600 0.9rem var(--display); color: var(--bg); background: var(--fg);
+  border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer;
+}
+.next:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.foot { font-size: 0.78rem; color: var(--muted); text-align: center; line-height: 1.5; max-width: 34em; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (prefers-reduced-motion: reduce) { .opt .dot { transition: none; } }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <h1>Nearest Hue</h1>
+    <div class="stats">
+      <span>round <b id="roundNo">1</b>/10</span>
+      <span>score <b id="score">0</b></span>
+      <span>streak <b id="streak">0</b></span>
+      <span>best <b id="best">—</b></span>
+    </div>
+  </header>
+
+  <div class="modes" role="group" aria-label="Difficulty">
+    <button type="button" id="mode-easy" data-mode="easy">Easy</button>
+    <button type="button" id="mode-medium" data-mode="medium">Medium</button>
+    <button type="button" id="mode-hard" data-mode="hard">Hard</button>
+  </div>
+
+  <div class="plate" id="plate" aria-label="Target colour with ten candidate swatches">
+    <div class="target" id="target"></div>
+  </div>
+
+  <div class="readout" id="readout">Pick the small swatch closest to the centre colour.</div>
+  <div class="detail" id="detail" hidden></div>
+  <button class="next" id="next" hidden>Next colour</button>
+
+  <p class="foot">Distance is ΔE<sub>OK</sub>, straight-line distance in OKLab (the Cartesian form of OKLCH), shown ×100. A game is 10 rounds; Easy spreads the swatches wider, Hard packs them tighter, and each mode keeps its own best. Changing mode starts a new game. Closest scores 10, second 7, third 4.5, any other up to 4. Subtle calls earn a bonus: up to +5 for the closest, +3 for second, +2 for third. A call is subtle when the ΔE gap is small: between the closest and runner-up when you're right, or between your pick and the closest when you're not. Swatches get closer together as your streak grows. Keys 1–9 and 0 pick clockwise from the top; Enter moves on.</p>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const plate = $('plate'), targetEl = $('target'), readout = $('readout'), nextBtn = $('next');
+
+  // OKLab -> linear sRGB, for gamut checks
+  function oklabToLinSrgb(L, a, b) {
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+    const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+    return [
+      4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    ];
+  }
+  const inGamut = ([L, a, b]) => oklabToLinSrgb(L, a, b).every(v => v >= -1e-4 && v <= 1 + 1e-4);
+  const toLch = ([L, a, b]) => {
+    const C = Math.hypot(a, b);
+    let h = Math.atan2(b, a) * 180 / Math.PI; if (h < 0) h += 360;
+    return [L, C, h];
+  };
+  const css = lab => { const [L, C, h] = toLch(lab); return `oklch(${L.toFixed(4)} ${C.toFixed(4)} ${h.toFixed(2)})`; };
+  const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+
+  function randomTarget() {
+    for (;;) {
+      const L = rand(0.42, 0.88), C = rand(0.07, 0.2), h = rand(0, 360) * Math.PI / 180;
+      const lab = [L, C * Math.cos(h), C * Math.sin(h)];
+      if (inGamut(lab)) return lab;
+    }
+  }
+  function randomDir() {
+    // uniform direction on a sphere, with L axis scaled a bit so lightness shifts don't dominate
+    const u = rand(-1, 1), t = rand(0, 2 * Math.PI), r = Math.sqrt(1 - u * u);
+    return [u * 0.8, r * Math.cos(t), r * Math.sin(t)];
+  }
+  // weights for random shifts along lightness, chroma, and hue (hue kept small)
+  const W_L = 1, W_C = 1, W_H = 0.05;
+  const MAX_HUE_DEG = 3;
+  function offsetPoint(base, mag) {
+    const C = Math.hypot(base[1], base[2]) || 1e-6;
+    const rad = [base[1] / C, base[2] / C], tan = [-rad[1], rad[0]];
+    for (let i = 0; i < 60; i++) {
+      const [u, x, y] = randomDir();
+      const dL = u * W_L, dC = x * W_C, dH = y * W_H;
+      const d = [dL, rad[0] * dC + tan[0] * dH, rad[1] * dC + tan[1] * dH];
+      const n = Math.hypot(...d);
+      const p = base.map((v, k) => v + d[k] / n * mag);
+      // reject shifts that swing hue (e.g. chroma dropping through grey)
+      const pc = Math.hypot(p[1], p[2]);
+      if (pc < C * 0.5) continue;
+      const dh = Math.acos(Math.min(1, (p[1] * base[1] + p[2] * base[2]) / (pc * C))) * 180 / Math.PI;
+      if (dh > MAX_HUE_DEG) continue;
+      if (inGamut(p)) return p;
+    }
+    return null;
+  }
+
+  // difficulty: base offset shrinks and the gap between best and the rest narrows with streak
+  // base: typical wrong-answer distance at streak 0; ratio: best/others gap (closer to 1 = harder)
+  const MODES = {
+    easy:   { base: 0.08, ratio: 0.45, ratioStep: 0.02,  shrink: 0.92 },
+    medium: { base: 0.05, ratio: 0.55, ratioStep: 0.025, shrink: 0.88 },
+    hard:   { base: 0.03, ratio: 0.68, ratioStep: 0.02,  shrink: 0.9 },
+  };
+  function makeRound(streak) {
+    const m = MODES[mode];
+    const lvl = Math.min(streak, 15);
+    const base = m.base * Math.pow(m.shrink, lvl);
+    const ratio = Math.min(0.92, m.ratio + m.ratioStep * lvl);
+    for (;;) {
+      const target = randomTarget();
+      const bestMag = base * ratio;
+      const best = offsetPoint(target, bestMag);
+      if (!best) continue;
+      const others = [];
+      for (let i = 0; i < N - 1; i++) {
+        const p = offsetPoint(target, base * rand(1, 1.6));
+        if (!p) break;
+        others.push(p);
+      }
+      if (others.length < N - 1) continue;
+      const opts = [best, ...others].map(p => ({ lab: p, d: dist(p, target) }));
+      // shuffle
+      for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
+      const minD = Math.min(...opts.map(o => o.d));
+      return { target, opts, answer: opts.findIndex(o => o.d === minD), base, lvl };
+    }
+  }
+
+  const N = 10, STEP = 360 / N, ROUNDS = 10;
+  const state = { score: 0, streak: 0, round: null, done: false, rotation: 0, roundNo: 0, hits: 0, over: false };
+  let mode = 'medium';
+  try { const v = localStorage.getItem('nearestHueMode'); if (v in MODES) mode = v; } catch (e) {}
+  let bestScore = null;
+  function loadBest() {
+    bestScore = null;
+    try { const v = localStorage.getItem('nearestHueBest2_' + mode); if (v != null) bestScore = +v; } catch (e) {}
+  }
+  loadBest();
+  function syncModeButtons() {
+    document.querySelectorAll('.modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  }
+  document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.mode === mode && state.roundNo <= 1 && !state.done) return;
+    mode = b.dataset.mode;
+    try { localStorage.setItem('nearestHueMode', mode); } catch (e) {}
+    loadBest(); syncModeButtons(); newGame();
+  }));
+
+  // subtlety: 1 when the deciding ΔE gap is 0, falling to 0 at a gap of SUBTLE_SPAN
+  const SUBTLE_SPAN = 0.03;
+  const TIERS = [ { base: 10, bonus: 5 }, { base: 7, bonus: 3 }, { base: 4.5, bonus: 2 } ];
+  function pointsFor(r, i) {
+    const sorted = r.opts.map(o => o.d).sort((a, b) => a - b);
+    const rank = sorted.indexOf(r.opts[i].d); // 0 = closest
+    const gap = rank === 0 ? sorted[1] - sorted[0] : r.opts[i].d - sorted[0];
+    const subtle = Math.max(0, Math.min(1, 1 - gap / SUBTLE_SPAN));
+    let base, bonus;
+    if (rank < 3) { base = TIERS[rank].base; bonus = TIERS[rank].bonus * subtle; }
+    else { base = 0; bonus = 4 * subtle; }
+    const pts = Math.round((base + bonus) * 10) / 10;
+    return { pts, base, bonus: Math.round(bonus * 10) / 10, rank, subtle };
+  }
+  const fmt = v => (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, '');
+
+  function render() {
+    const r = state.round;
+    targetEl.style.background = css(r.target);
+    // plate: average of all swatches, mostly desaturated, nudged a little darker or lighter
+    const all = [r.target, ...r.opts.map(o => o.lab)];
+    const avg = [0, 1, 2].map(k => all.reduce((s, p) => s + p[k], 0) / all.length);
+    const [aL, aC, aH] = toLch(avg);
+    // light target -> slightly lighter plate, dark target -> slightly darker
+    const pL = 0.93; // always a light grey field
+    // plain neutral grey
+    plate.style.backgroundColor = `oklch(${pL.toFixed(4)} 0 0)`;
+    plate.style.setProperty('--ink', pL > 0.6 ? 'oklch(0.22 0 0)' : 'oklch(0.96 0 0)');
+    plate.querySelectorAll('.opt').forEach(n => n.remove());
+    plate.classList.toggle('done', state.done);
+    const R = 112;
+    r.opts.forEach((o, i) => {
+      const ang = (-90 + i * STEP + state.rotation) * Math.PI / 180;
+      const b = document.createElement('button');
+      b.className = 'opt';
+      b.id = 'opt' + i;
+      b.style.transform = `translate(${(R * Math.cos(ang)).toFixed(1)}px, ${(R * Math.sin(ang)).toFixed(1)}px)`;
+      b.setAttribute('aria-label', 'Swatch ' + (i + 1));
+      b.innerHTML = '<span class="dot"></span>';
+      b.firstChild.style.background = css(o.lab);
+      if (state.done) {
+        const de = document.createElement('span');
+        de.className = 'de';
+        de.textContent = (o.d * 100).toFixed(1);
+        b.appendChild(de);
+        if (i === r.answer) b.classList.add('correct');
+        else if (i === state.picked) b.classList.add('wrong');
+        if (i === state.inspect) b.classList.add('inspected');
+        b.setAttribute('aria-label', 'Swatch ' + (i + 1) + ', show stats');
+      }
+      b.addEventListener('click', () => pick(i));
+      plate.appendChild(b);
+    });
+    $('score').textContent = fmt(state.score);
+    $('streak').textContent = state.streak;
+    $('roundNo').textContent = Math.max(1, state.roundNo);
+    $('best').textContent = bestScore == null ? '—' : fmt(bestScore);
+    nextBtn.hidden = !state.done;
+    nextBtn.textContent = state.over ? 'Play again' : state.roundNo >= ROUNDS ? 'See result' : 'Next colour';
+    renderDetail();
+  }
+
+  function renderDetail() {
+    const el = $('detail');
+    el.hidden = !state.done;
+    if (!state.done) return;
+    const r = state.round, i = state.inspect;
+    const [tL, tC, tH] = toLch(r.target);
+    const row = (name, lab, L, C, H, extra) =>
+      `<span class="lab"><span class="sw" style="background:${css(lab)}"></span>${name}</span><span>${L}</span><span>${C}</span><span>${H}</span><span>${extra}</span>`;
+    let html = `<span></span><span class="h">L</span><span class="h">C</span><span class="h">h°</span><span class="h">ΔE</span>`;
+    html += row('target', r.target, tL.toFixed(3), tC.toFixed(3), tH.toFixed(1), '');
+    if (i == null) {
+      html += `<span class="hint">Tap any swatch to see its values.</span>`;
+    } else {
+      const o = r.opts[i], [L, C, H] = toLch(o.lab);
+      let dh = H - tH; if (dh > 180) dh -= 360; if (dh < -180) dh += 360;
+      const sg = v => (v >= 0 ? '+' : '−') + Math.abs(v);
+      const rank = r.opts.map(x => x.d).sort((a, b) => a - b).indexOf(o.d) + 1;
+      html += row('swatch', o.lab, L.toFixed(3), C.toFixed(3), H.toFixed(1), (o.d * 100).toFixed(1));
+      html += `<span class="lab" style="color:var(--muted)">diff</span><span>${sg(+(L - tL).toFixed(3))}</span><span>${sg(+(C - tC).toFixed(3))}</span><span>${sg(+dh.toFixed(1))}</span><span style="color:var(--muted)">#${rank} of ${N}</span>`;
+    }
+    el.innerHTML = html;
+  }
+
+  function newGame() {
+    Object.assign(state, { score: 0, streak: 0, roundNo: 0, hits: 0, over: false });
+    newRound();
+  }
+
+  function finish() {
+    state.over = true;
+    const isBest = bestScore == null || state.score > bestScore;
+    if (isBest) { bestScore = state.score; try { localStorage.setItem('nearestHueBest2_' + mode, String(bestScore)); } catch (e) {} }
+    readout.innerHTML = `<span class="verdict ok">${fmt(state.score)} points</span> · ${state.hits}/${ROUNDS} closest picks${isBest ? ' · new best' : ` · best ${fmt(bestScore)}`}`;
+    render();
+    nextBtn.focus();
+  }
+
+  function advance() {
+    if (state.over) newGame();
+    else if (state.roundNo >= ROUNDS) finish();
+    else newRound();
+  }
+
+  function newRound() {
+    state.roundNo++;
+    state.round = makeRound(state.streak);
+    state.done = false; state.picked = null; state.inspect = null;
+    state.rotation = Math.floor(Math.random() * N) * STEP;
+    readout.textContent = 'Pick the small swatch closest to the centre colour.';
+    render();
+  }
+
+  function pick(i) {
+    if (state.done) { state.inspect = i; render(); return; }
+    const r = state.round;
+    state.done = true; state.picked = i; state.inspect = i;
+    const ok = i === r.answer;
+    const { pts, base: basePts, bonus, rank, subtle } = pointsFor(r, i);
+    state.score = Math.round((state.score + pts) * 10) / 10;
+    if (ok) { state.hits++; state.streak++; } else state.streak = 0;
+    const place = ['closest', '2nd closest', '3rd closest'][rank] || `#${rank + 1}`;
+    const ptsLine = `+${fmt(pts)} points` + (basePts ? ` (${fmt(basePts)} for ${place} + ${fmt(bonus)} subtlety)` : ` (${place}, ${Math.round(subtle * 100)}% subtle)`);
+    const [L, C, h] = toLch(r.target);
+    const yours = (r.opts[i].d * 100).toFixed(1), best = (r.opts[r.answer].d * 100).toFixed(1);
+    readout.innerHTML = ok
+      ? `<span class="verdict ok">Closest.</span> ${ptsLine}. ΔE ${best}, the next nearest was ${(Math.min(...r.opts.filter((_, k) => k !== r.answer).map(o => o.d)) * 100).toFixed(1)}.<br><code>target oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h.toFixed(1)})</code>`
+      : `<span class="verdict no">Not quite.</span> ${ptsLine}. Yours was ΔE ${yours}; the closest was ${best}. Streak reset.<br><code>target oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h.toFixed(1)})</code>`;
+    render();
+    nextBtn.focus();
+  }
+
+  nextBtn.addEventListener('click', advance);
+  document.addEventListener('keydown', e => {
+    if (!state.done && /^[0-9]$/.test(e.key)) {
+      // map keys clockwise from top, accounting for rotation
+      const slot = e.key === '0' ? 9 : +e.key - 1, shift = state.rotation / STEP;
+      pick(((slot - shift) % N + N) % N);
+    } else if (state.done && e.key === 'Enter' && document.activeElement !== nextBtn) {
+      advance();
+    }
+  });
+
+  function start(data) {
+    if (data && data.mode in MODES && data.mode !== mode) { mode = data.mode; loadBest(); }
+    syncModeButtons();
+    if (data && data.round && data.roundNo) Object.assign(state, data);
+    else newGame();
+    render();
+    if (state.done && data.readout) readout.innerHTML = data.readout;
+  }
+  window.claude?.hot?.snapshot?.(() => ({ ...state, mode, readout: readout.innerHTML }));
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
