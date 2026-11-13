@@ -226,7 +226,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
   // every colour on screen stays within this lightness band
-  const L_MIN = 0.4, L_MAX = 0.8;
+  const L_MIN = 0.4, L_MAX = 0.8, L_SPREAD = 0.15;
   // saturation here = chroma as a share of the most chroma sRGB can show at that lightness and hue
   const S_MIN = 0.4, S_MAX = 0.8;
   function maxChroma(L, h) {
@@ -255,7 +255,8 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     const turn = (Math.random() < 0.5 ? -1 : 1) * dh * Math.PI / 180;
     for (let i = 0; i < 60; i++) {
       const th = rand(0, 2 * Math.PI);
-      const nL = L + lc * Math.cos(th), nC = C + lc * Math.sin(th);
+      // decoy shift plus an independent lightness spread so distractors don't bunch together
+      const nL = L + lc * Math.cos(th) + rand(-L_SPREAD, L_SPREAD), nC = C + lc * Math.sin(th);
       if (nC <= 0 || nL < L_MIN || nL > L_MAX) continue;
       const sat = nC / maxChroma(nL, h + turn);
       if (sat < S_MIN || sat > S_MAX) continue;
