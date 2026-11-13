@@ -271,8 +271,8 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   // The closer a swatch's hue, the bigger its lightness/chroma decoy, so the right answer looks most off.
   const MODES = {
     // Very easy uses Gaussian spreads (SDs below) instead of the decoy scheme; see gaussOpts()
-    veryeasy: { hue: 28, ratio: 0, ratioStep: 0, shrink: 0.95, decoy: 0,
-      gauss: { hueSd: 28, minGap: 12, ansHueSd: 4, lSd: 0.07, cSd: 0.03, ansLSd: 0.025, ansCSd: 0.01 } },
+    veryeasy: { hue: 15, ratio: 0, ratioStep: 0, shrink: 0.95, decoy: 0,
+      gauss: { hueSd: 15, minGap: 12, ansHueSd: 4, lSd: 0.1, cSd: 0.05, ansLSd: 0.025, ansCSd: 0.01 } },
     easy:   { hue: 14, ratio: 0.45, ratioStep: 0.02,  shrink: 0.93, decoy: 0.04 },
     medium: { hue: 9,  ratio: 0.55, ratioStep: 0.025, shrink: 0.9,  decoy: 0.06 },
     hard:   { hue: 6,  ratio: 0.65, ratioStep: 0.02,  shrink: 0.92, decoy: 0.08 },
