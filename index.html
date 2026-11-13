@@ -270,8 +270,9 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   // ratio: closest offset as a share of that (closer to 1 = harder); decoy: max lightness/chroma shift.
   // The closer a swatch's hue, the bigger its lightness/chroma decoy, so the right answer looks most off.
   const MODES = {
-    // Very easy: wrong hues spread wide (22-55°), and the answer keeps lightness/chroma close to the target
-    veryeasy: { hue: 22, ratio: 0.35, ratioStep: 0.015, shrink: 0.95, decoy: 0.04, spread: 2.5, answerClose: true },
+    // Very easy uses Gaussian spreads (SDs below) instead of the decoy scheme; see gaussOpts()
+    veryeasy: { hue: 28, ratio: 0, ratioStep: 0, shrink: 0.95, decoy: 0,
+      gauss: { hueSd: 28, minGap: 12, ansHueSd: 4, lSd: 0.07, cSd: 0.03, ansLSd: 0.025, ansCSd: 0.01 } },
     easy:   { hue: 14, ratio: 0.45, ratioStep: 0.02,  shrink: 0.93, decoy: 0.04 },
     medium: { hue: 9,  ratio: 0.55, ratioStep: 0.025, shrink: 0.9,  decoy: 0.06 },
     hard:   { hue: 6,  ratio: 0.65, ratioStep: 0.02,  shrink: 0.92, decoy: 0.08 },
@@ -289,6 +290,42 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
   applyCustom();
   const customKey = () => `custom_${custom.spread}_${custom.margin}_${custom.decoy}_${custom.tighten ? 1 : 0}`;
 
+  // standard normal sample (Box-Muller)
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+
+  // a swatch at signed hue offset dh (degrees) with lightness/chroma offsets dL, dC; null if it leaves the bands
+  function swatchAt(target, dh, dL, dC) {
+    const [L, C, H] = toLch(target);
+    const nL = L + dL, nC = C + dC, nh = (H + dh) * Math.PI / 180;
+    if (nC <= 0 || nL < L_MIN || nL > L_MAX) return null;
+    const sat = nC / maxChroma(nL, nh);
+    if (sat < S_MIN || sat > S_MAX) return null;
+    return [nL, nC * Math.cos(nh), nC * Math.sin(nh)];
+  }
+  // Gaussian round: answer hue ~ N(0, ansHueSd) with small N lightness/chroma wobble;
+  // distractor hue ~ N(0, hueSd), kept at least minGap and 1.8x the answer's offset away; broader N lightness/chroma.
+  function gaussOpts(target, g, sf) {
+    const draw = (hueOf, lSd, cSd) => {
+      for (let i = 0; i < 200; i++) {
+        const dh = hueOf(); if (dh == null) continue;
+        const p = swatchAt(target, dh, gauss() * lSd, gauss() * cSd);
+        if (p) return p;
+      }
+      return null;
+    };
+    const ans = draw(() => gauss() * g.ansHueSd * sf, g.ansLSd, g.ansCSd);
+    if (!ans) return null;
+    const ansD = Math.abs(hueDiff(ans, target));
+    const floor = Math.max(g.minGap * sf, ansD * 1.8);
+    const out = [ans];
+    for (let k = 1; k < N; k++) {
+      const p = draw(() => { const dh = gauss() * g.hueSd * sf; return Math.abs(dh) >= floor ? dh : null; }, g.lSd, g.cSd);
+      if (!p) return null;
+      out.push(p);
+    }
+    return out;
+  }
+
   function makeRound(streak) {
     const m = MODES[mode];
     const lvl = Math.min(streak, 15);
@@ -296,7 +333,15 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     const ratio = Math.min(0.92, m.ratio + m.ratioStep * lvl);
     for (;;) {
       const target = randomTarget();
-      const dhs = [base * ratio, ...Array.from({ length: N - 1 }, () => base * rand(1, m.spread || 1.4))];
+      if (m.gauss) {
+        const pts = gaussOpts(target, m.gauss, Math.pow(m.shrink, lvl));
+        if (!pts) continue;
+        const opts = pts.map(p => ({ lab: p, d: Math.abs(hueDiff(p, target)), de: dist(p, target) }));
+        for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
+        const minD = Math.min(...opts.map(o => o.d));
+        return { target, opts, answer: opts.findIndex(o => o.d === minD), base, lvl };
+      }
+      const dhs = [base * ratio, ...Array.from({ length: N - 1 }, () => base * rand(1, 1.4))];
       const lo = Math.min(...dhs), hi = Math.max(...dhs);
       // three random wrong swatches also get a full-size decoy, so "most different-looking" isn't a giveaway
       const loud = new Set();
@@ -304,10 +349,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
       const opts = [];
       for (const [k, dh] of dhs.entries()) {
         const closeness = loud.has(k) ? 1 : (hi - dh) / (hi - lo); // 1 for the closest hue, 0 for the furthest
-        const isAnswer = k === 0;
-        const p = isAnswer && m.answerClose
-          ? makeSwatch(target, dh, 0.012 * Math.random(), 0.03)   // answer looks like the target apart from hue
-          : makeSwatch(target, dh, m.decoy * (0.2 + 0.8 * closeness) * rand(0.7, 1.3));
+        const p = makeSwatch(target, dh, m.decoy * (0.2 + 0.8 * closeness) * rand(0.7, 1.3));
         if (!p) break;
         opts.push({ lab: p, d: Math.abs(hueDiff(p, target)), de: dist(p, target) });
       }
@@ -487,7 +529,7 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
 
     // x axis: absolute OKLCH hue, ticks on round hue values every 2°, 5° or 10° depending on span
     add('rule', { left: PL + 'px', right: PR + 'px', top: axisY + 'px' });
-    const step = span > 25 ? 10 : span > 10 ? 5 : 2;
+    const step = span > 45 ? 20 : span > 25 ? 10 : span > 10 ? 5 : 2;
     const tgtH = toLch(r.target)[2];
     for (let a = Math.ceil((tgtH - span) / step) * step; a <= tgtH + span; a += step) {
       const px = x(a - tgtH) + 'px';
