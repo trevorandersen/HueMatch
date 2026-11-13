@@ -88,22 +88,26 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
 }
 .opt.inspected .dot { outline: 2px solid var(--ink, var(--fg)); outline-offset: 3px; }
 .lineup {
-  width: 100%; box-sizing: border-box; border-radius: 16px; padding: 12px 8px 8px;
-  display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); align-items: start;
+  position: relative; width: 100%; box-sizing: border-box; border-radius: 16px;
   color: var(--ink, var(--fg));
 }
 .lineup .cell {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  position: absolute; width: 40px; margin-left: -20px; display: flex; flex-direction: column; align-items: center; gap: 3px;
   background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit;
 }
-.lineup .cell .dot { width: 28px; height: 28px; border-radius: 50%; }
-.lineup .cell.tgt .dot { width: 34px; height: 34px; margin-top: -3px; }
-.lineup .cell .lbl { font-family: var(--mono); font-size: 0.6rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lineup .cell .dot { width: 22px; height: 22px; border-radius: 50%; }
+.lineup .cell.tgt .dot { width: 30px; height: 30px; margin-top: -4px; }
+.lineup .cell.tgt .lbl { font-weight: 600; }
+.lineup .cell .lbl { font-family: var(--mono); font-size: 0.56rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lineup .cell.correct .dot { box-shadow: 0 0 0 2px var(--good); }
 .lineup .cell.wrong .dot { box-shadow: 0 0 0 2px var(--bad); }
 .lineup .cell.inspected .dot { outline: 2px solid currentColor; outline-offset: 2px; }
 .lineup .cell:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 8px; }
-.lineup .axis { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: 0.65rem; opacity: 0.7; padding: 6px 4px 0; }
+.lineup .rule { position: absolute; height: 1px; background: currentColor; opacity: 0.35; }
+.lineup .tick { position: absolute; width: 1px; height: 5px; margin-left: -0.5px; background: currentColor; opacity: 0.5; }
+.lineup .tick.zero { height: 9px; opacity: 0.8; }
+.lineup .tlbl { position: absolute; transform: translateX(-50%); font-family: var(--mono); font-size: 0.58rem; opacity: 0.7; white-space: nowrap; }
+.lineup .end { position: absolute; font-size: 0.62rem; opacity: 0.7; }
 .detail {
   width: 100%; font-family: var(--mono); font-size: 0.75rem; font-variant-numeric: tabular-nums;
   display: grid; grid-template-columns: auto repeat(4, 1fr); gap: 4px 10px; align-items: center;
@@ -404,13 +408,34 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
     const r = state.round;
     el.style.background = `oklch(${pL.toFixed(4)} 0 0)`;
     el.style.setProperty('--ink', pL > 0.6 ? 'oklch(0.22 0 0)' : 'oklch(0.96 0 0)');
+    el.innerHTML = '';
     const items = r.opts.map((o, i) => ({ i, lab: o.lab, dh: hueDiff(o.lab, r.target) }));
     items.push({ i: -1, lab: r.target, dh: 0 });
-    items.sort((a, b) => a.dh - b.dh || (a.i < 0 ? -1 : 1));
-    el.innerHTML = '';
+
+    // horizontal scale: symmetric around the target so 0° sits in the middle
+    const W = el.clientWidth, PAD = 30;
+    const span = Math.max(...items.map(it => Math.abs(it.dh))) * 1.08 || 1;
+    const x = dh => W / 2 + dh / span * (W / 2 - PAD);
+
+    // stack swatches that would overlap into lanes (target always in lane 0)
+    const CELL = 38, LANE = 35, TOP = 12;
+    const lanes = [];
+    const order = [...items].sort((a, b) => (a.i < 0 ? -1 : b.i < 0 ? 1 : a.dh - b.dh));
+    for (const it of order) {
+      it.x = x(it.dh);
+      let k = 0;
+      while (lanes[k] && lanes[k].some(px => Math.abs(px - it.x) < CELL)) k++;
+      (lanes[k] = lanes[k] || []).push(it.x);
+      it.lane = k;
+    }
+    const axisY = TOP + lanes.length * LANE + 4;
+    el.style.height = (axisY + 34) + 'px';
+
     for (const it of items) {
       const c = document.createElement(it.i < 0 ? 'div' : 'button');
       c.className = 'cell' + (it.i < 0 ? ' tgt' : '');
+      c.style.left = it.x.toFixed(1) + 'px';
+      c.style.top = (TOP + it.lane * LANE) + 'px';
       if (it.i >= 0) {
         c.type = 'button';
         if (it.i === r.answer) c.classList.add('correct');
@@ -422,11 +447,20 @@ h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; margin: 0; te
       c.innerHTML = `<span class="dot" style="background:${css(it.lab)}"></span><span class="lbl">${it.i < 0 ? 'target' : (it.dh >= 0 ? '+' : '−') + Math.abs(it.dh).toFixed(1) + '°'}</span>`;
       el.appendChild(c);
     }
-    const ax = document.createElement('div');
-    ax.className = 'axis';
-    ax.innerHTML = '<span>← lower hue</span><span>higher hue →</span>';
-    el.appendChild(ax);
+
+    // axis with ticks every 2°, 5° or 10° depending on span
+    const add = (cls, styles, text) => { const d = document.createElement('div'); d.className = cls; Object.assign(d.style, styles); if (text) d.textContent = text; el.appendChild(d); };
+    add('rule', { left: PAD + 'px', right: PAD + 'px', top: axisY + 'px' });
+    const step = span > 25 ? 10 : span > 10 ? 5 : 2;
+    for (let v = -Math.floor(span / step) * step; v <= span; v += step) {
+      const px = x(v) + 'px';
+      add('tick' + (v === 0 ? ' zero' : ''), { left: px, top: axisY + 'px' });
+      add('tlbl', { left: px, top: (axisY + 9) + 'px' }, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '°');
+    }
+    add('end', { left: '10px', top: (axisY + 20) + 'px' }, '← lower hue');
+    add('end', { right: '10px', top: (axisY + 20) + 'px' }, 'higher hue →');
   }
+
 
   function renderDetail() {
     const el = $('detail');
