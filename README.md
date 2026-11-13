@@ -1,6 +1,6 @@
 # HueMatch
 
-A colour matching game. A target colour sits in the middle of a ring of ten swatches, each nudged slightly in lightness and saturation (hue barely moves). Pick the swatch closest to the target, measured as ΔE in OKLab (the Cartesian form of OKLCH).
+A colour matching game. A target colour sits in the middle of a ring of ten swatches. Each swatch trades hue against lightness and chroma: the closer its hue is to the target, the further its lightness and chroma are. Pick the swatch closest to the target, measured as ΔE in OKLab (the Cartesian form of OKLCH).
 
 ## Play
 
